@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Play Chess vs AI (Python in Browser!)</title>
+  <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+  <style>
+    body { text-align: center; font-family: sans-serif; }
+    #board { width: 400px; margin: 20px auto; }
+    #status { font-size: 1.2em; }
+  </style>
+</head>
+<body>
+  <h1>Play Chess vs AI</h1>
+  <div id="board"></div>
+  <div id="status">Your move</div>
+
+  <!-- Scripts -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.25.1/full/pyodide.js"></script>
+  <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+  <script src="https://unpkg.com/chess.js@0.12.0/chess.min.js"></script>
+  <script src="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
+
+  <script type="module">
+    let board = null;
+    let game = new Chess();
+    let pyodide = null;
+
+    async function loadPython() {
+      pyodide = await loadPyodide();
+      const response1 = await fetch("evaluation2.py");
+      const code1 = await response1.text();
+      pyodide.runPython(code1);
+
+      const response2 = await fetch("search_algorithm.py");
+      const code2 = await response2.text();
+      pyodide.runPython(code2);
+
+      pyodide.runPython(`import chess`);
+    }
+
+    function makeAIMove(uci) {
+      game.move({ from: uci.slice(0, 2), to: uci.slice(2, 4), promotion: 'q' });
+      board.position(game.fen());
+    }
+
+    function onDragStart(source, piece) {
+      if (game.game_over() || piece.startsWith('b')) return false;
+    }
+
+    async function onDrop(source, target) {
+      let move = game.move({ from: source, to: target, promotion: 'q' });
+      if (move === null) return 'snapback';
+
+      board.position(game.fen());
+
+      // Send FEN to Python to get AI move
+      let fen = game.fen();
+      pyodide.globals.set("fen_str", fen);
+      let ai_uci = pyodide.runPython(`
+import chess
+from search_algorithm import find_best_move
+
+board = chess.Board(fen_str)
+move = find_best_move(board, depth=2)
+move.uci()
+      `);
+      makeAIMove(ai_uci);
+
+      if (game.game_over()) {
+        document.getElementById("status").innerText = "Game Over";
+      }
+    }
+
+    function onSnapEnd() {
+      board.position(game.fen());
+    }
+
+    window.onload = async () => {
+      board = Chessboard('board', {
+        draggable: true,
+        position: 'start',
+        onDragStart: onDragStart,
+        onDrop: onDrop,
+        onSnapEnd: onSnapEnd
+      });
+      await loadPython();
+    };
+  </script>
+</body>
+</html>
