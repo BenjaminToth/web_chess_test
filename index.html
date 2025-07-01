@@ -1,13 +1,22 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Play Chess vs AI (Python in Browser!)</title>
-  <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
+  <meta charset="UTF-8" />
+  <title>Play Chess vs AI</title>
+  <link rel="stylesheet" href="https://unpkg.com/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css" />
   <style>
-    body { text-align: center; font-family: sans-serif; }
-    #board { width: 400px; margin: 20px auto; }
-    #status { font-size: 1.2em; }
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding-top: 20px;
+    }
+    #board {
+      width: 400px;
+      margin: 20px auto;
+    }
+    #status {
+      font-size: 1.2em;
+    }
   </style>
 </head>
 <body>
@@ -28,14 +37,16 @@
 
     async function loadPython() {
       pyodide = await loadPyodide();
-      const response1 = await fetch("evaluation2.py");
-      const code1 = await response1.text();
-      pyodide.runPython(code1);
 
-      const response2 = await fetch("search_algorithm.py");
-      const code2 = await response2.text();
-      pyodide.runPython(code2);
+      // Load evaluation2.py
+      const evalCode = await fetch("evaluation2.py").then(res => res.text());
+      pyodide.runPython(evalCode);
 
+      // Load search_algorithm.py
+      const searchCode = await fetch("search_algorithm.py").then(res => res.text());
+      pyodide.runPython(searchCode);
+
+      // Also import chess in Pyodide
       pyodide.runPython(`import chess`);
     }
 
@@ -53,11 +64,11 @@
       if (move === null) return 'snapback';
 
       board.position(game.fen());
+      document.getElementById("status").innerText = "AI is thinking...";
 
-      // Send FEN to Python to get AI move
-      let fen = game.fen();
-      pyodide.globals.set("fen_str", fen);
-      let ai_uci = pyodide.runPython(`
+      // Send FEN to Pyodide
+      pyodide.globals.set("fen_str", game.fen());
+      let aiMove = pyodide.runPython(`
 import chess
 from search_algorithm import find_best_move
 
@@ -65,11 +76,10 @@ board = chess.Board(fen_str)
 move = find_best_move(board, depth=2)
 move.uci()
       `);
-      makeAIMove(ai_uci);
 
-      if (game.game_over()) {
-        document.getElementById("status").innerText = "Game Over";
-      }
+      makeAIMove(aiMove);
+
+      document.getElementById("status").innerText = game.game_over() ? "Game Over" : "Your move";
     }
 
     function onSnapEnd() {
@@ -84,6 +94,7 @@ move.uci()
         onDrop: onDrop,
         onSnapEnd: onSnapEnd
       });
+
       await loadPython();
     };
   </script>
